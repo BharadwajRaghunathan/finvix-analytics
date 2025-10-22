@@ -7,6 +7,7 @@ import {
   PointElement,
   LineElement,
   BarElement,
+  Filler,  // ← ADDED: Import Filler plugin
   Title,
   Tooltip,
   Legend,
@@ -14,10 +15,14 @@ import {
 import { motion } from 'framer-motion';
 import { FaChartLine, FaChartArea, FaBullseye, FaChartBar, FaPercentage, FaGlobeAmericas } from 'react-icons/fa';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
+
+// ← MODIFIED: Register Filler plugin
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Title, Tooltip, Legend);
+
 
 const Dashboard = ({ data }) => {
   const labels = data.map(d => new Date(d.time).toLocaleTimeString());
+
 
   const calculateAverageConversions = (campaignType) => {
     const filteredData = data.filter(d => d.campaign_type === campaignType);
@@ -25,11 +30,13 @@ const Dashboard = ({ data }) => {
     return filteredData.length ? totalConversions / filteredData.length : 0;
   };
 
+
   const calculateConversionsByRegion = (region, campaignType) => {
     const filteredData = data.filter(d => d.region === region && d.campaign_type === campaignType);
     const totalConversions = filteredData.reduce((sum, d) => sum + (d.conversions || 0), 0);
     return filteredData.length ? totalConversions / filteredData.length : 0;
   };
+
 
   const conversionsROIData = {
     labels,
@@ -54,6 +61,7 @@ const Dashboard = ({ data }) => {
       },
     ],
   };
+
 
   const impressionsClicksData = {
     labels,
@@ -83,6 +91,7 @@ const Dashboard = ({ data }) => {
     ],
   };
 
+
   const engagementData = {
     datasets: [
       {
@@ -98,6 +107,7 @@ const Dashboard = ({ data }) => {
       },
     ],
   };
+
 
   const campaignPerformanceData = {
     labels: ['Search Ads', 'Display Ads', 'Email', 'Social Media'],
@@ -117,6 +127,7 @@ const Dashboard = ({ data }) => {
     ],
   };
 
+
   const ctrTrendsData = {
     labels,
     datasets: [
@@ -132,6 +143,7 @@ const Dashboard = ({ data }) => {
       },
     ],
   };
+
 
   const conversionsByRegionData = {
     labels: ['South America', 'North America', 'Asia', 'Europe'],
@@ -187,6 +199,7 @@ const Dashboard = ({ data }) => {
     ],
   };
 
+
   const chartOptions = (titleText, type) => {
     const options = {
       responsive: true,
@@ -210,6 +223,7 @@ const Dashboard = ({ data }) => {
       animation: { duration: 2000, easing: 'easeInOutQuart' },
     };
 
+
     if (type === 'line' || type === 'area') {
       options.scales = {
         x: { ticks: { color: '#E0E1DD' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
@@ -228,6 +242,7 @@ const Dashboard = ({ data }) => {
     }
     return options;
   };
+
 
   const chartDescriptions = [
     {
@@ -261,6 +276,7 @@ const Dashboard = ({ data }) => {
       icon: <FaGlobeAmericas />,
     },
   ];
+
 
   const renderChartWithDescription = (chartComponent, description, index) => {
     const isEven = index % 2 === 0;
@@ -307,6 +323,7 @@ const Dashboard = ({ data }) => {
               <p className="text-slate-300 leading-relaxed text-sm">{description.description}</p>
             </motion.div>
 
+
             {/* Chart Container (Right) */}
             <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-6 shadow-2xl border border-slate-700/50 backdrop-blur-sm">
               {chartComponent}
@@ -316,6 +333,7 @@ const Dashboard = ({ data }) => {
       </motion.div>
     );
   };
+
 
   return (
     <div className="min-h-screen bg-slate-950 p-6 space-y-8">
@@ -352,5 +370,6 @@ const Dashboard = ({ data }) => {
     </div>
   );
 };
+
 
 export default Dashboard;
