@@ -103,39 +103,63 @@ def encode_categorical(input_df):
         input_df (pd.DataFrame): Input data with categorical features.
     
     Returns:
-        pd.DataFrame: Encoded DataFrame.
+        pd.DataFrame: Encoded DataFrame with all categorical features as integers.
     
     Raises:
         Exception: If label encoders are not loaded.
     """
     if label_encoders is None:
-        print("⚠️ Label encoders not loaded. Returning original DataFrame.")
-        return input_df
+        print("⚠️ Label encoders not loaded. Cannot encode categorical features.")
+        raise Exception("Label encoders not loaded")
     
     df_encoded = input_df.copy()
     
-    # Define categorical features
+    # Define categorical features that need encoding
     categorical_features = ['Campaign Type', 'Region', 'Industry', 'Company Size']
     
     for feature in categorical_features:
         if feature not in df_encoded.columns:
+            print(f"⚠️ Feature '{feature}' not found in DataFrame columns")
             continue
         
         if feature not in label_encoders:
-            print(f"⚠️ No encoder found for {feature}, skipping encoding")
+            print(f"⚠️ No encoder found for '{feature}', using default value 0")
+            df_encoded[feature] = 0
             continue
-            
+        
         le = label_encoders[feature]
         
         try:
-            # Handle unseen categories by mapping to a default value (most frequent)
-            df_encoded[feature] = df_encoded[feature].apply(
-                lambda x: le.transform([x])[0] if x in le.classes_ else le.transform([le.classes_[0]])[0]
-            )
+            # Get current values
+            current_values = df_encoded[feature]
+            
+            # Encode each value
+            encoded_values = []
+            for value in current_values:
+                if value in le.classes_:
+                    # Value exists in encoder, transform it
+                    encoded_values.append(le.transform([value])[0])
+                else:
+                    # Unseen value, use first class as default
+                    print(f"⚠️ Unseen value '{value}' for '{feature}', using default")
+                    encoded_values.append(le.transform([le.classes_[0]])[0])
+            
+            # Assign encoded values as integers
+            df_encoded[feature] = pd.Series(encoded_values, dtype=int)
+            
+            print(f"✅ Encoded '{feature}': {current_values.tolist()} -> {encoded_values}")
+            
         except Exception as e:
-            print(f"⚠️ Error encoding {feature}: {str(e)}")
+            print(f"❌ Error encoding '{feature}': {str(e)}")
             # Use default value (0) if encoding fails
             df_encoded[feature] = 0
+    
+    # Verify all categorical features are now numeric
+    for feature in categorical_features:
+        if feature in df_encoded.columns:
+            if not pd.api.types.is_numeric_dtype(df_encoded[feature]):
+                print(f"⚠️ Feature '{feature}' is still not numeric after encoding!")
+                df_encoded[feature] = 0
     
     return df_encoded
 
@@ -156,11 +180,18 @@ def predict_conversions(input_df):
         raise Exception("Conversions model not loaded. Please check model files.")
     
     try:
+        print(f"📊 Input DataFrame columns: {input_df.columns.tolist()}")
+        print(f"📊 Input DataFrame dtypes: {input_df.dtypes.to_dict()}")
+        
         # Encode categorical features
         encoded_df = encode_categorical(input_df)
+        
+        print(f"📊 Encoded DataFrame dtypes: {encoded_df.dtypes.to_dict()}")
+        
         prediction = conv_model.predict(encoded_df)[0]
         return float(prediction)
     except Exception as e:
+        print(f"❌ Error in predict_conversions: {str(e)}")
         raise Exception(f"Error predicting conversions: {str(e)}")
 
 def predict_roi(input_df):
