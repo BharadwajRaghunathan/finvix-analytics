@@ -270,23 +270,61 @@ const ManualInputsContent = () => {
 
   const handlePredict = async (input, modelType) => {
     setPredictionLoading(true);
+    
+    // Log request for debugging
+    console.log('🔍 Sending prediction request:', {
+      input,
+      model_type: modelType,
+      inputLength: input.length,
+    });
+    
     try {
       const res = await api.post('/predict', {
         input,
         model_type: modelType,
       });
+      
+      console.log('✅ Prediction response:', res.data);
+      
       setPredictions(res.data);
       setModelType(modelType);
       toast.success('Prediction completed successfully!');
     } catch (err) {
-      console.error('Prediction error:', err.response?.data || err.message);
+      console.error('❌ Prediction error details:', {
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        message: err.message,
+      });
       
-      if (err.response?.status === 429) {
-        toast.error('Too many requests. Please try again later.');
+      // Enhanced error handling with specific messages
+      if (err.response?.status === 400) {
+        const errorMsg = err.response?.data?.error || 'Bad request';
+        
+        // Check if it's the NumPy dtype error
+        if (errorMsg.includes('isnan') || errorMsg.includes('dtype')) {
+          toast.error('Backend model encoding error. Please contact support or wait for deployment to complete.', {
+            autoClose: 8000,
+          });
+        } else if (errorMsg.includes('Invalid input')) {
+          toast.error('Invalid input data. Please check all fields are filled correctly.');
+        } else {
+          toast.error(`Server error: ${errorMsg}`);
+        }
+      } else if (err.response?.status === 429) {
+        toast.error('Too many requests. Please try again in a few moments.');
       } else if (err.response?.status === 401) {
         toast.error('Session expired. Please login again.');
+        // Optionally redirect to login
+        // window.location.href = '/login';
+      } else if (err.response?.status === 500) {
+        toast.error('Server error. The backend service may be deploying updates. Please try again in 2-3 minutes.');
+      } else if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
+        toast.error('Request timeout. The server may be busy. Please try again.');
+      } else if (err.message.includes('Network Error')) {
+        toast.error('Cannot connect to server. Please check your internet connection.');
       } else {
-        const errorMessage = err.response?.data?.error || 'Prediction failed. Please try again.';
+        const errorMessage = err.response?.data?.error || err.message || 'Prediction failed. Please try again.';
         toast.error(`Prediction failed: ${errorMessage}`);
       }
     } finally {
