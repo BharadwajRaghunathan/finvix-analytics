@@ -1,29 +1,51 @@
-# Ignore environment files
+# Environment files
 .env
-
 .env.local
-.env.development
 .env.production
-.env.test
+.env.development
 
-
-# Ignore dependency folders
-node_modules/
-venv/
-
-# Ignore logs and cache files
-*.log
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Ignore database files (if any)
+# Database
+*.db
+*.sqlite
 *.sqlite3
 
-# Ignore generated reports and exports
-csv_excel_reports/
-reports/
+# Models
+*.pkl
+*.h5
+*.joblib
 
-# Optional: ignore backup and temp files
-*.bak
-*.tmp
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
