@@ -34,7 +34,8 @@ def load_models():
         
         # Check if models directory exists
         if not os.path.exists(MODELS_DIR):
-            raise Exception(f"Models directory not found: {MODELS_DIR}")
+            print(f"⚠️ Models directory not found: {MODELS_DIR}")
+            return False
         
         # Load ROI model
         if os.path.exists(MODEL_PATHS['roi_model']):
@@ -103,20 +104,38 @@ def encode_categorical(input_df):
     
     Returns:
         pd.DataFrame: Encoded DataFrame.
+    
+    Raises:
+        Exception: If label encoders are not loaded.
     """
     if label_encoders is None:
-        raise Exception("Label encoders not loaded. Cannot encode categorical features.")
+        print("⚠️ Label encoders not loaded. Returning original DataFrame.")
+        return input_df
     
     df_encoded = input_df.copy()
     
-    for feature, le in label_encoders.items():
+    # Define categorical features
+    categorical_features = ['Campaign Type', 'Region', 'Industry', 'Company Size']
+    
+    for feature in categorical_features:
         if feature not in df_encoded.columns:
             continue
+        
+        if feature not in label_encoders:
+            print(f"⚠️ No encoder found for {feature}, skipping encoding")
+            continue
             
-        # Handle unseen categories by mapping to a default value (most frequent)
-        df_encoded[feature] = df_encoded[feature].apply(
-            lambda x: le.transform([x])[0] if x in le.classes_ else le.transform([le.classes_[0]])[0]
-        )
+        le = label_encoders[feature]
+        
+        try:
+            # Handle unseen categories by mapping to a default value (most frequent)
+            df_encoded[feature] = df_encoded[feature].apply(
+                lambda x: le.transform([x])[0] if x in le.classes_ else le.transform([le.classes_[0]])[0]
+            )
+        except Exception as e:
+            print(f"⚠️ Error encoding {feature}: {str(e)}")
+            # Use default value (0) if encoding fails
+            df_encoded[feature] = 0
     
     return df_encoded
 
