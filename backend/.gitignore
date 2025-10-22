@@ -1,0 +1,23 @@
+# Ignore environment files
+.env
+
+# Ignore dependency folders
+node_modules/
+venv/
+
+# Ignore logs and cache files
+*.log
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore database files (if any)
+*.sqlite3
+
+# Ignore generated reports and exports
+csv_excel_reports/
+reports/
+
+# Optional: ignore backup and temp files
+*.bak
+*.tmp
