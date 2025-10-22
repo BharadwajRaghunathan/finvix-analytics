@@ -4,11 +4,14 @@ import numpy as np
 import os
 import warnings
 
+
 warnings.filterwarnings('ignore')
+
 
 # Get the base directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
+
 
 # Model file paths
 MODEL_PATHS = {
@@ -19,12 +22,14 @@ MODEL_PATHS = {
     'label_encoders': os.path.join(MODELS_DIR, 'label_encoders.pkl')
 }
 
+
 # Initialize models as None
 roi_model = None
 conv_model = None
 actual_roi_model = None
 actual_conversions_model = None
 label_encoders = None
+
 
 def load_models():
     """Load all models with error handling"""
@@ -94,13 +99,15 @@ def load_models():
         traceback.print_exc()
         return False
 
+
 # Load models on module import
 load_models()
+
 
 def encode_categorical(input_df):
     """
     Encode categorical features in the input DataFrame using saved label encoders.
-    Ensures all values are properly converted to numeric types.
+    Ensures all values are properly converted to numeric types using vectorized operations.
     
     Args:
         input_df (pd.DataFrame): Input data with categorical features.
@@ -122,7 +129,7 @@ def encode_categorical(input_df):
     print(f"🔍 Input columns: {df_encoded.columns.tolist()}")
     print(f"🔍 Input dtypes BEFORE encoding:\n{df_encoded.dtypes}")
     
-    # Encode each categorical feature
+    # Encode each categorical feature using vectorized operations
     for feature in categorical_features:
         if feature not in df_encoded.columns:
             print(f"⚠️ Feature '{feature}' not found in DataFrame")
@@ -137,24 +144,32 @@ def encode_categorical(input_df):
         le = label_encoders[feature]
         
         try:
-            # Convert column to string first to ensure proper handling
-            df_encoded[feature] = df_encoded[feature].astype(str)
+            # Convert to string and get values as numpy array
+            values = df_encoded[feature].astype(str).values
             
-            # Encode values
-            def encode_value(val):
-                if val in le.classes_:
-                    return int(le.transform([val])[0])
-                else:
-                    print(f"⚠️ Unknown value '{val}' for '{feature}', using default")
-                    return int(le.transform([le.classes_[0]])[0])
+            # Create mapping dictionary for known classes
+            encoding_map = {str(cls): int(idx) for idx, cls in enumerate(le.classes_)}
+            default_value = 0  # Use 0 (first class index) as default for unknown values
             
-            # Apply encoding and explicitly convert to int
-            df_encoded[feature] = df_encoded[feature].apply(encode_value).astype('int64')
+            # Vectorized encoding using pandas Series.map()
+            # This is much faster and more type-safe than .apply()
+            encoded_series = pd.Series(values).map(encoding_map)
+            
+            # Fill NaN values (unmapped categories) with default
+            encoded_series = encoded_series.fillna(default_value)
+            
+            # Explicitly convert to int64 using numpy array
+            encoded_values = encoded_series.values.astype(np.int64)
+            
+            # Assign back to dataframe
+            df_encoded[feature] = encoded_values
             
             print(f"✅ Encoded '{feature}': dtype={df_encoded[feature].dtype}, values={df_encoded[feature].tolist()}")
             
         except Exception as e:
             print(f"❌ Error encoding '{feature}': {str(e)}")
+            import traceback
+            traceback.print_exc()
             df_encoded[feature] = 0
     
     # Ensure all numeric features are float64
@@ -166,11 +181,12 @@ def encode_categorical(input_df):
     
     for feature in numeric_features:
         if feature in df_encoded.columns:
-            df_encoded[feature] = pd.to_numeric(df_encoded[feature], errors='coerce').astype('float64')
+            # Convert to numeric, coercing errors to NaN, then fill with 0.0
+            df_encoded[feature] = pd.to_numeric(df_encoded[feature], errors='coerce').fillna(0.0).astype(np.float64)
     
     # Handle Conversions column if present (for ROI prediction)
     if 'Conversions' in df_encoded.columns:
-        df_encoded['Conversions'] = pd.to_numeric(df_encoded['Conversions'], errors='coerce').astype('float64')
+        df_encoded['Conversions'] = pd.to_numeric(df_encoded['Conversions'], errors='coerce').fillna(0.0).astype(np.float64)
     
     print(f"🔍 Output dtypes AFTER encoding:\n{df_encoded.dtypes}")
     
@@ -179,9 +195,14 @@ def encode_categorical(input_df):
     if object_cols:
         print(f"⚠️ WARNING: Object columns still present: {object_cols}")
         for col in object_cols:
+            print(f"   Converting '{col}' to 0")
             df_encoded[col] = 0
     
+    # Final dtype check
+    print(f"✅ Final encoded DataFrame dtypes:\n{df_encoded.dtypes}")
+    
     return df_encoded
+
 
 def predict_conversions(input_df):
     """
@@ -227,6 +248,7 @@ def predict_conversions(input_df):
         traceback.print_exc()
         raise Exception(f"Error predicting conversions: {str(e)}")
 
+
 def predict_roi(input_df):
     """
     Predict ROI using the trained ROI model.
@@ -270,6 +292,7 @@ def predict_roi(input_df):
         traceback.print_exc()
         raise Exception(f"Error predicting ROI: {str(e)}")
 
+
 def predict_actual_roi(input_df):
     """
     Predict actual ROI using the trained actual ROI model.
@@ -294,6 +317,7 @@ def predict_actual_roi(input_df):
     except Exception as e:
         print(f"❌ Error in predict_actual_roi: {str(e)}")
         raise Exception(f"Error predicting actual ROI: {str(e)}")
+
 
 def predict_actual_conversions(input_df):
     """
@@ -320,10 +344,12 @@ def predict_actual_conversions(input_df):
         print(f"❌ Error in predict_actual_conversions: {str(e)}")
         raise Exception(f"Error predicting actual conversions: {str(e)}")
 
+
 # Utility function to check if models are ready
 def models_ready():
     """Check if all required models are loaded."""
     return all([roi_model, conv_model, actual_roi_model, actual_conversions_model, label_encoders])
+
 
 # Export function to get model status
 def get_model_status():
