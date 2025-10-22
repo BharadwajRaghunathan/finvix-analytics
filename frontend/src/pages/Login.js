@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import axios from 'axios';
 import { FiUser, FiLock, FiLogIn, FiAlertCircle } from 'react-icons/fi';
+import api from '../config/api';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -17,11 +17,24 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      const response = await axios.post('http://localhost:5000/login', { username, password });
+      const response = await api.post('/login', { username, password });
+      
+      // Store token and username
       localStorage.setItem('token', response.data.access_token);
+      localStorage.setItem('username', username);
+      
+      // Navigate to greeting page
       navigate('/greeting');
     } catch (err) {
-      setError('Invalid username or password');
+      console.error('Login error:', err);
+      
+      if (err.response?.status === 401) {
+        setError('Invalid username or password');
+      } else if (err.response?.status === 429) {
+        setError('Too many login attempts. Please try again later.');
+      } else {
+        setError(err.response?.data?.message || 'Login failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -82,7 +95,8 @@ const Login = () => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
-                  className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 placeholder-slate-500"
+                  disabled={isLoading}
+                  className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 placeholder-slate-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -100,7 +114,8 @@ const Login = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 placeholder-slate-500"
+                  disabled={isLoading}
+                  className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 placeholder-slate-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>

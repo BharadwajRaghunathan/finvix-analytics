@@ -14,7 +14,9 @@ const Layout = () => {
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
   const handleLogout = () => {
+    // Clear all user data
     localStorage.removeItem('token');
+    localStorage.removeItem('username');
     navigate('/login');
   };
 

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import axios from 'axios';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
+import api from '../config/api';
 import Dashboard from './Dashboard';
 
 const DashboardContent = () => {
   const [dashboardData, setDashboardData] = useState(null);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   const fetchDashboardData = async () => {
@@ -19,20 +20,24 @@ const DashboardContent = () => {
         return;
       }
 
-      // Include token in Authorization header
-      const headers = { Authorization: `Bearer ${token}` };
-      const res = await axios.get('http://localhost:5000/dashboard', { headers });
+      // Use centralized API instance (token automatically added via interceptor)
+      const res = await api.get('/dashboard');
       setDashboardData(res.data.data);
+      setError(null);
     } catch (err) {
       console.error('Dashboard fetch error:', err);
+      
       if (err.response && err.response.status === 401) {
         // Handle invalid or expired token
         toast.error('Session expired. Please log in again.');
         localStorage.removeItem('token');
+        localStorage.removeItem('username');
         navigate('/login');
       } else {
         // Handle other errors (e.g., network issues, server errors)
-        toast.error('Failed to load dashboard data');
+        const errorMessage = err.response?.data?.message || 'Failed to load dashboard data';
+        setError(errorMessage);
+        toast.error(errorMessage);
       }
     }
   };
@@ -61,7 +66,29 @@ const DashboardContent = () => {
       </div>
 
       {/* Dashboard Content */}
-      {dashboardData ? (
+      {error ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          {/* Error State */}
+          <div className="relative w-20 h-20 mb-6">
+            <div className="absolute top-0 left-0 w-full h-full bg-red-500/20 rounded-full flex items-center justify-center">
+              <span className="text-4xl">⚠️</span>
+            </div>
+          </div>
+          
+          <p className="text-red-400 text-lg font-medium mb-2">
+            Failed to Load Dashboard
+          </p>
+          <p className="text-slate-500 text-sm mb-4">
+            {error}
+          </p>
+          <button
+            onClick={fetchDashboardData}
+            className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors duration-200"
+          >
+            Retry
+          </button>
+        </div>
+      ) : dashboardData ? (
         <Dashboard data={dashboardData} />
       ) : (
         <div className="flex flex-col items-center justify-center py-20">

@@ -1,43 +1,71 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { motion } from 'framer-motion';
 import { FiArrowRight, FiLogOut, FiUser, FiStar } from 'react-icons/fi';
+import api from '../config/api';
 
 const Greeting = () => {
   const [username, setUsername] = useState('');
   const [quotes, setQuotes] = useState([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
+    const fetchGreeting = async () => {
+      const token = localStorage.getItem('token');
+      const storedUsername = localStorage.getItem('username');
 
-    axios
-      .get('http://localhost:5000/greeting', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      .then((response) => {
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      // Use stored username immediately for better UX
+      if (storedUsername) {
+        setUsername(storedUsername);
+      }
+
+      try {
+        const response = await api.get('/greeting');
         setUsername(response.data.username);
-        setQuotes(response.data.quotes);
-      })
-      .catch((error) => {
-        if (error.response && error.response.status === 401) {
+        setQuotes(response.data.quotes || []);
+      } catch (error) {
+        console.error('Error fetching greeting data:', error);
+        
+        if (error.response?.status === 401) {
           localStorage.removeItem('token');
+          localStorage.removeItem('username');
           navigate('/login');
         } else {
-          console.error('Error fetching greeting data:', error);
+          // If greeting endpoint fails, still show username from localStorage
+          if (storedUsername) {
+            setUsername(storedUsername);
+          }
         }
-      });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGreeting();
   }, [navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('username');
     navigate('/login');
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -84,7 +112,7 @@ const Greeting = () => {
           </div>
 
           {/* Motivational Quotes Section */}
-          {quotes.length > 0 && (
+          {quotes && quotes.length > 0 && (
             <div className="space-y-4 mb-10">
               <div className="flex items-center justify-center space-x-2 mb-6">
                 <FiStar className="text-yellow-400 text-xl" />

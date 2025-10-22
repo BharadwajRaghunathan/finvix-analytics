@@ -1,19 +1,16 @@
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { HashLink } from 'react-router-hash-link';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import Tilt from 'react-parallax-tilt';
 import Particles from '@tsparticles/react';
 import { loadFull } from 'tsparticles';
-import axios from 'axios';
-import { toast } from 'react-toastify';
 import finvixLogo from '../assets/finvix_logo.jpg';
 import { FiMenu, FiX } from 'react-icons/fi';
 
 const Home = () => {
   const [activeSection, setActiveSection] = useState('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const navigate = useNavigate();
 
   const particlesInit = useCallback(async (engine) => {
     await loadFull(engine);
@@ -25,39 +22,6 @@ const Home = () => {
     { name: 'Why Finvix?', path: '#why-finvix', id: 'why-finvix' },
     { name: 'Features', path: '#features', id: 'features' },
   ], []);
-
-  // Unused function - can be removed
-  const onPredict = async (inputArray, modelType) => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error('Please log in to make predictions');
-        navigate('/login');
-        return;
-      }
-
-      const response = await axios.post(
-        'http://localhost:5000/predict',
-        { inputArray, modelType },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      toast.success('Prediction successful!');
-      console.log('Prediction result:', response.data);
-    } catch (error) {
-      console.error('Prediction error:', error);
-      if (error.response && error.response.status === 401) {
-        toast.error('Unauthorized. Please log in again.');
-        navigate('/login');
-      } else {
-        toast.error('Prediction failed. Please try again.');
-      }
-    }
-  };
 
   useEffect(() => {
     const observer = new IntersectionObserver(

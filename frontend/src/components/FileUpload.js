@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import axios from 'axios';
 import { toast } from 'react-toastify';
 import { FiUploadCloud, FiX, FiFile } from 'react-icons/fi';
+import api from '../config/api';
 
 const FileUpload = ({ onUpload }) => {
   const [modelType, setModelType] = useState('both');
@@ -17,7 +17,8 @@ const FileUpload = ({ onUpload }) => {
 
   const handleRemoveFile = () => {
     setFile(null);
-    document.querySelector('input[type="file"]').value = null;
+    const fileInput = document.querySelector('input[type="file"]');
+    if (fileInput) fileInput.value = null;
   };
 
   const handleUpload = async () => {
@@ -25,36 +26,50 @@ const FileUpload = ({ onUpload }) => {
       toast.error('Please select a file to upload');
       return;
     }
+
+    // Validate file type
+    const validTypes = fileFormat === 'csv' ? ['.csv'] : ['.xlsx', '.xls'];
+    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+    if (!validTypes.includes(fileExtension)) {
+      toast.error(`Please select a valid ${fileFormat.toUpperCase()} file`);
+      return;
+    }
+
     setIsUploading(true);
     setUploadProgress(0);
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('model_type', modelType);
-    formData.append('file_format', fileFormat);
 
     try {
-      const res = await axios.post('http://localhost:5000/upload_predict', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      const res = await api.post('/upload_predict', formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+        },
         onUploadProgress: (progressEvent) => {
           const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           setUploadProgress(percent);
         },
       });
+
       let results = res.data.results || (res.data.status === 'success' ? [res.data] : res.data);
       if (!Array.isArray(results)) {
         results = [results];
       }
+
       onUpload(results, modelType, fileFormat);
       toast.success('File uploaded and predictions generated successfully!');
+      
+      // Clear file after successful upload
+      handleRemoveFile();
     } catch (err) {
       console.error('File upload error:', err.response?.data || err);
-      const errorMessage = err.response?.data?.error || 'Unknown error';
-      toast.error(`Failed to upload file: ${errorMessage}`);
+      const errorMessage = err.response?.data?.error || 'Failed to upload file. Please try again.';
+      toast.error(`Upload failed: ${errorMessage}`);
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
-      setFile(null);
-      document.querySelector('input[type="file"]').value = null;
     }
   };
 
@@ -83,7 +98,8 @@ const FileUpload = ({ onUpload }) => {
           <select
             value={fileFormat}
             onChange={(e) => setFileFormat(e.target.value)}
-            className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 cursor-pointer hover:bg-slate-700"
+            disabled={isUploading}
+            className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 cursor-pointer hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="csv">CSV (.csv)</option>
             <option value="xlsx">Excel (.xlsx)</option>
@@ -96,7 +112,8 @@ const FileUpload = ({ onUpload }) => {
           <select
             value={modelType}
             onChange={(e) => setModelType(e.target.value)}
-            className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 cursor-pointer hover:bg-slate-700"
+            disabled={isUploading}
+            className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 cursor-pointer hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="roi">ROI Only</option>
             <option value="conversions">Conversions Only</option>
@@ -112,8 +129,9 @@ const FileUpload = ({ onUpload }) => {
           {/* Hidden File Input */}
           <input
             type="file"
-            accept=".csv, .xlsx"
+            accept={fileFormat === 'csv' ? '.csv' : '.xlsx,.xls'}
             onChange={handleFileChange}
+            disabled={isUploading}
             className="hidden"
             id="file-upload"
           />
@@ -121,13 +139,19 @@ const FileUpload = ({ onUpload }) => {
           {/* Custom File Upload Button */}
           <label
             htmlFor="file-upload"
-            className="flex items-center justify-center w-full bg-slate-700/30 border-2 border-dashed border-slate-600 rounded-xl px-6 py-8 cursor-pointer hover:bg-slate-700/50 hover:border-cyan-500/50 transition-all duration-300 group"
+            className={`flex items-center justify-center w-full bg-slate-700/30 border-2 border-dashed border-slate-600 rounded-xl px-6 py-8 transition-all duration-300 group ${
+              isUploading
+                ? 'cursor-not-allowed opacity-50'
+                : 'cursor-pointer hover:bg-slate-700/50 hover:border-cyan-500/50'
+            }`}
           >
             {!file ? (
               <div className="text-center">
                 <FiUploadCloud className="mx-auto text-5xl text-slate-400 group-hover:text-cyan-400 transition-colors duration-300 mb-3" />
                 <p className="text-slate-300 font-medium mb-1">Click to upload file</p>
-                <p className="text-slate-500 text-sm">CSV or Excel files only</p>
+                <p className="text-slate-500 text-sm">
+                  {fileFormat === 'csv' ? 'CSV files only' : 'Excel files only'}
+                </p>
               </div>
             ) : (
               <div className="flex items-center justify-between w-full">
@@ -148,9 +172,10 @@ const FileUpload = ({ onUpload }) => {
                   type="button"
                   onClick={(e) => {
                     e.preventDefault();
-                    handleRemoveFile();
+                    if (!isUploading) handleRemoveFile();
                   }}
-                  className="bg-red-500/20 hover:bg-red-500/30 text-red-400 p-2 rounded-lg transition-colors duration-300"
+                  disabled={isUploading}
+                  className="bg-red-500/20 hover:bg-red-500/30 text-red-400 p-2 rounded-lg transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <FiX className="text-xl" />
                 </button>

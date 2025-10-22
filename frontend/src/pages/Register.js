@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import axios from 'axios';
 import { FiUser, FiMail, FiLock, FiUserPlus, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
+import api from '../config/api';
 
 const Register = () => {
   const [username, setUsername] = useState('');
@@ -18,10 +18,20 @@ const Register = () => {
     setIsLoading(true);
 
     try {
-      await axios.post('http://localhost:5000/register', { username, email, password });
+      await api.post('/register', { username, email, password });
       navigate('/login');
     } catch (err) {
-      setError('Registration failed. Username or email may already exist.');
+      console.error('Registration error:', err);
+      
+      if (err.response?.status === 409) {
+        setError('Username or email already exists. Please try a different one.');
+      } else if (err.response?.status === 400) {
+        setError(err.response?.data?.message || 'Invalid registration data. Please check your inputs.');
+      } else if (err.response?.status === 429) {
+        setError('Too many registration attempts. Please try again later.');
+      } else {
+        setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -82,7 +92,10 @@ const Register = () => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
-                  className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 placeholder-slate-500"
+                  disabled={isLoading}
+                  minLength={3}
+                  maxLength={20}
+                  className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 placeholder-slate-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -100,7 +113,8 @@ const Register = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 placeholder-slate-500"
+                  disabled={isLoading}
+                  className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 placeholder-slate-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -118,7 +132,9 @@ const Register = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 placeholder-slate-500"
+                  disabled={isLoading}
+                  minLength={8}
+                  className="w-full bg-slate-700/50 border border-slate-600 text-slate-200 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-300 placeholder-slate-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
               <p className="text-slate-500 text-xs mt-1">

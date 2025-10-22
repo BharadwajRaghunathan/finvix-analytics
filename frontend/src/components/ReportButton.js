@@ -2,11 +2,11 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import axios from 'axios';
 import { toast } from 'react-toastify';
 import { FiDownload, FiFileText, FiDatabase } from 'react-icons/fi';
+import api from '../config/api';
 
-const ReportButton = ({ sectionId, type, results, modelType }) => {
+const ReportButton = ({ sectionId, type, results, modelType, fileFormat = 'csv' }) => {
   const handleFrontendDownload = () => {
     const section = document.getElementById(sectionId);
     if (!section) {
@@ -34,32 +34,42 @@ const ReportButton = ({ sectionId, type, results, modelType }) => {
     });
   };
 
-  const handleBackendDownload = () => {
+  const handleBackendDownload = async () => {
     if (!results || !modelType) {
       toast.error('No valid results or model type provided to generate report');
       return;
     }
-    axios.post('http://localhost:5000/report', { results, model_type: modelType }, {
-      headers: { 'Content-Type': 'application/json' },
-      responseType: 'blob',
-    })
-      .then((res) => {
-        const reportBlob = new Blob([res.data], { type: 'application/pdf' });
-        if (reportBlob.size === 0) {
-          throw new Error('Empty PDF received');
+
+    try {
+      const res = await api.post('/report', 
+        { results, model_type: modelType }, 
+        {
+          headers: { 'Content-Type': 'application/json' },
+          responseType: 'blob',
         }
-        const reportUrl = window.URL.createObjectURL(reportBlob);
-        const link = document.createElement('a');
-        link.href = reportUrl;
-        link.download = `${modelType}_backend_report.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(reportUrl);
-        toast.success('Backend report downloaded successfully!');
-      })
-      .catch(async (err) => {
-        if (err.response && err.response.data) {
+      );
+
+      const reportBlob = new Blob([res.data], { type: 'application/pdf' });
+      
+      if (reportBlob.size === 0) {
+        throw new Error('Empty PDF received');
+      }
+
+      const reportUrl = window.URL.createObjectURL(reportBlob);
+      const link = document.createElement('a');
+      link.href = reportUrl;
+      link.download = `${modelType}_backend_report.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(reportUrl);
+      
+      toast.success('Backend report downloaded successfully!');
+    } catch (err) {
+      console.error('Backend report generation error:', err);
+      
+      if (err.response?.data) {
+        try {
           const errorText = await err.response.data.text();
           let errorMessage = 'Unknown error';
           try {
@@ -68,42 +78,54 @@ const ReportButton = ({ sectionId, type, results, modelType }) => {
           } catch {
             errorMessage = errorText;
           }
-          console.error('Backend report generation error:', errorMessage);
           toast.error(`Failed to download backend report: ${errorMessage}`);
-        } else {
-          console.error('Backend report generation error:', err);
-          toast.error(`Failed to download backend report: ${err.message || 'Unknown error'}`);
+        } catch {
+          toast.error('Failed to download backend report');
         }
-      });
+      } else {
+        toast.error(`Failed to download backend report: ${err.message || 'Unknown error'}`);
+      }
+    }
   };
 
-  const handleUploadReportDownload = () => {
+  const handleUploadReportDownload = async () => {
     console.log('Sending to /upload_report:', { results, model_type: modelType });
+    
     if (!results || !Array.isArray(results) || results.length === 0 || !modelType) {
       toast.error('No valid results or model type provided to generate report');
       return;
     }
-    axios.post('http://localhost:5000/upload_report', { results, model_type: modelType }, {
-      headers: { 'Content-Type': 'application/json' },
-      responseType: 'blob',
-    })
-      .then((res) => {
-        const reportBlob = new Blob([res.data], { type: 'application/pdf' });
-        if (reportBlob.size === 0) {
-          throw new Error('Empty PDF received');
+
+    try {
+      const res = await api.post('/upload_report', 
+        { results, model_type: modelType }, 
+        {
+          headers: { 'Content-Type': 'application/json' },
+          responseType: 'blob',
         }
-        const reportUrl = window.URL.createObjectURL(reportBlob);
-        const link = document.createElement('a');
-        link.href = reportUrl;
-        link.download = `${modelType}_report.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(reportUrl);
-        toast.success('Upload report downloaded successfully!');
-      })
-      .catch(async (err) => {
-        if (err.response && err.response.data) {
+      );
+
+      const reportBlob = new Blob([res.data], { type: 'application/pdf' });
+      
+      if (reportBlob.size === 0) {
+        throw new Error('Empty PDF received');
+      }
+
+      const reportUrl = window.URL.createObjectURL(reportBlob);
+      const link = document.createElement('a');
+      link.href = reportUrl;
+      link.download = `${modelType}_report.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(reportUrl);
+      
+      toast.success('Upload report downloaded successfully!');
+    } catch (err) {
+      console.error('Upload report generation error:', err);
+      
+      if (err.response?.data) {
+        try {
           const errorText = await err.response.data.text();
           let errorMessage = 'Unknown error';
           try {
@@ -112,41 +134,49 @@ const ReportButton = ({ sectionId, type, results, modelType }) => {
           } catch {
             errorMessage = errorText;
           }
-          console.error('Upload report generation error:', errorMessage);
           toast.error(`Failed to download upload report: ${errorMessage}`);
-        } else {
-          console.error('Upload report generation error:', err);
-          toast.error(`Failed to download upload report: ${err.message || 'Unknown error'}`);
+        } catch {
+          toast.error('Failed to download upload report');
         }
-      });
+      } else {
+        toast.error(`Failed to download upload report: ${err.message || 'Unknown error'}`);
+      }
+    }
   };
 
-  const handleDownloadResults = () => {
+  const handleDownloadResults = async () => {
     if (!results || !modelType) {
       toast.error('No results or model type provided to download');
       return;
     }
-    const fileType = 'csv';
-    axios.post('http://localhost:5000/download_results', { results, model_type: modelType, file_type: fileType }, {
-      headers: { 'Content-Type': 'application/json' },
-      responseType: 'blob',
-    })
-      .then((res) => {
-        const blob = new Blob([res.data], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${modelType}_results.${fileType}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        toast.success('Results downloaded successfully!');
-      })
-      .catch((err) => {
-        console.error('Results download error:', err);
-        toast.error('Failed to download results: ' + (err.response?.data?.error || 'Unknown error'));
-      });
+
+    const fileType = fileFormat || 'csv';
+
+    try {
+      const res = await api.post('/download_results', 
+        { results, model_type: modelType, file_type: fileType }, 
+        {
+          headers: { 'Content-Type': 'application/json' },
+          responseType: 'blob',
+        }
+      );
+
+      const mimeType = fileType === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      const blob = new Blob([res.data], { type: mimeType });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${modelType}_results.${fileType}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Results downloaded successfully!');
+    } catch (err) {
+      console.error('Results download error:', err);
+      toast.error('Failed to download results: ' + (err.response?.data?.error || err.message || 'Unknown error'));
+    }
   };
 
   const handleDownload = () => {
@@ -184,7 +214,7 @@ const ReportButton = ({ sectionId, type, results, modelType }) => {
         };
       case 'download-results':
         return {
-          text: 'Download Results (.csv)',
+          text: `Download Results (.${fileFormat || 'csv'})`,
           icon: <FiDatabase className="text-lg" />,
           className: 'bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700',
         };

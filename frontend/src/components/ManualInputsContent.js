@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import axios from 'axios';
 import { FiTrendingUp, FiTrendingDown, FiMinus } from 'react-icons/fi';
+import api from '../config/api';
 
 import PredictionForm from './PredictionForm';
 import ReportButton from './ReportButton';
@@ -271,19 +271,23 @@ const ManualInputsContent = () => {
   const handlePredict = async (input, modelType) => {
     setPredictionLoading(true);
     try {
-      const res = await axios.post('http://localhost:5000/predict', {
+      const res = await api.post('/predict', {
         input,
         model_type: modelType,
       });
       setPredictions(res.data);
       setModelType(modelType);
-      toast.success('Prediction completed!');
+      toast.success('Prediction completed successfully!');
     } catch (err) {
       console.error('Prediction error:', err.response?.data || err.message);
+      
       if (err.response?.status === 429) {
         toast.error('Too many requests. Please try again later.');
+      } else if (err.response?.status === 401) {
+        toast.error('Session expired. Please login again.');
       } else {
-        toast.error('Prediction failed: ' + (err.response?.data?.error || 'Unknown error'));
+        const errorMessage = err.response?.data?.error || 'Prediction failed. Please try again.';
+        toast.error(`Prediction failed: ${errorMessage}`);
       }
     } finally {
       setPredictionLoading(false);
