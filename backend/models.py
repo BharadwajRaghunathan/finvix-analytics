@@ -1,5 +1,6 @@
 import joblib
 import pandas as pd
+import numpy as np
 import os
 import warnings
 
@@ -69,6 +70,7 @@ def load_models():
         if os.path.exists(MODEL_PATHS['label_encoders']):
             label_encoders = joblib.load(MODEL_PATHS['label_encoders'])
             print("✅ Label encoders loaded successfully")
+            print(f"📋 Available encoders: {list(label_encoders.keys())}")
         else:
             print(f"⚠️ Label encoders not found at: {MODEL_PATHS['label_encoders']}")
         
@@ -98,190 +100,234 @@ load_models()
 def encode_categorical(input_df):
     """
     Encode categorical features in the input DataFrame using saved label encoders.
+    Ensures all values are properly converted to numeric types.
     
     Args:
         input_df (pd.DataFrame): Input data with categorical features.
     
     Returns:
-        pd.DataFrame: Encoded DataFrame with all categorical features as integers.
-    
-    Raises:
-        Exception: If label encoders are not loaded.
+        pd.DataFrame: Encoded DataFrame with all features as numeric types.
     """
     if label_encoders is None:
         print("⚠️ Label encoders not loaded. Cannot encode categorical features.")
         raise Exception("Label encoders not loaded")
     
+    # Create a copy to avoid modifying original
     df_encoded = input_df.copy()
     
     # Define categorical features that need encoding
     categorical_features = ['Campaign Type', 'Region', 'Industry', 'Company Size']
     
+    print(f"🔍 Input DataFrame shape: {df_encoded.shape}")
+    print(f"🔍 Input columns: {df_encoded.columns.tolist()}")
+    print(f"🔍 Input dtypes BEFORE encoding:\n{df_encoded.dtypes}")
+    
+    # Encode each categorical feature
     for feature in categorical_features:
         if feature not in df_encoded.columns:
-            print(f"⚠️ Feature '{feature}' not found in DataFrame columns")
+            print(f"⚠️ Feature '{feature}' not found in DataFrame")
+            df_encoded[feature] = 0
             continue
         
         if feature not in label_encoders:
-            print(f"⚠️ No encoder found for '{feature}', using default value 0")
+            print(f"⚠️ No encoder for '{feature}', using 0")
             df_encoded[feature] = 0
             continue
         
         le = label_encoders[feature]
         
         try:
-            # Get current values
-            current_values = df_encoded[feature]
+            # Convert column to string first to ensure proper handling
+            df_encoded[feature] = df_encoded[feature].astype(str)
             
-            # Encode each value
-            encoded_values = []
-            for value in current_values:
-                if value in le.classes_:
-                    # Value exists in encoder, transform it
-                    encoded_values.append(le.transform([value])[0])
+            # Encode values
+            def encode_value(val):
+                if val in le.classes_:
+                    return int(le.transform([val])[0])
                 else:
-                    # Unseen value, use first class as default
-                    print(f"⚠️ Unseen value '{value}' for '{feature}', using default")
-                    encoded_values.append(le.transform([le.classes_[0]])[0])
+                    print(f"⚠️ Unknown value '{val}' for '{feature}', using default")
+                    return int(le.transform([le.classes_[0]])[0])
             
-            # Assign encoded values as integers
-            df_encoded[feature] = pd.Series(encoded_values, dtype=int)
+            # Apply encoding and explicitly convert to int
+            df_encoded[feature] = df_encoded[feature].apply(encode_value).astype('int64')
             
-            print(f"✅ Encoded '{feature}': {current_values.tolist()} -> {encoded_values}")
+            print(f"✅ Encoded '{feature}': dtype={df_encoded[feature].dtype}, values={df_encoded[feature].tolist()}")
             
         except Exception as e:
             print(f"❌ Error encoding '{feature}': {str(e)}")
-            # Use default value (0) if encoding fails
             df_encoded[feature] = 0
     
-    # Verify all categorical features are now numeric
-    for feature in categorical_features:
+    # Ensure all numeric features are float64
+    numeric_features = [
+        'Ad Spend', 'Clicks', 'Impressions', 'Conversion Rate',
+        'Click-Through Rate (CTR)', 'Cost Per Click (CPC)', 'Cost Per Conversion',
+        'Customer Acquisition Cost (CAC)', 'Seasonality Factor'
+    ]
+    
+    for feature in numeric_features:
         if feature in df_encoded.columns:
-            if not pd.api.types.is_numeric_dtype(df_encoded[feature]):
-                print(f"⚠️ Feature '{feature}' is still not numeric after encoding!")
-                df_encoded[feature] = 0
+            df_encoded[feature] = pd.to_numeric(df_encoded[feature], errors='coerce').astype('float64')
+    
+    # Handle Conversions column if present (for ROI prediction)
+    if 'Conversions' in df_encoded.columns:
+        df_encoded['Conversions'] = pd.to_numeric(df_encoded['Conversions'], errors='coerce').astype('float64')
+    
+    print(f"🔍 Output dtypes AFTER encoding:\n{df_encoded.dtypes}")
+    
+    # Final validation - ensure NO object types remain
+    object_cols = df_encoded.select_dtypes(include=['object']).columns.tolist()
+    if object_cols:
+        print(f"⚠️ WARNING: Object columns still present: {object_cols}")
+        for col in object_cols:
+            df_encoded[col] = 0
     
     return df_encoded
 
 def predict_conversions(input_df):
     """
     Predict conversions using the trained conversions model.
-    
-    Args:
-        input_df (pd.DataFrame): Input data for prediction.
-    
-    Returns:
-        float: Predicted conversions.
-    
-    Raises:
-        Exception: If conversions model is not loaded.
     """
     if conv_model is None:
         raise Exception("Conversions model not loaded. Please check model files.")
     
     try:
-        print(f"📊 Input DataFrame columns: {input_df.columns.tolist()}")
-        print(f"📊 Input DataFrame dtypes: {input_df.dtypes.to_dict()}")
+        print("\n" + "="*50)
+        print("🔮 PREDICT CONVERSIONS")
+        print("="*50)
         
         # Encode categorical features
         encoded_df = encode_categorical(input_df)
         
-        print(f"📊 Encoded DataFrame dtypes: {encoded_df.dtypes.to_dict()}")
+        # Ensure correct column order (if model expects specific order)
+        expected_features = [
+            'Ad Spend', 'Clicks', 'Impressions', 'Conversion Rate',
+            'Click-Through Rate (CTR)', 'Cost Per Click (CPC)', 'Cost Per Conversion',
+            'Customer Acquisition Cost (CAC)', 'Campaign Type', 'Region', 'Industry',
+            'Company Size', 'Seasonality Factor'
+        ]
         
+        # Reorder columns to match expected features
+        encoded_df = encoded_df[expected_features]
+        
+        print(f"📊 Final DataFrame shape: {encoded_df.shape}")
+        print(f"📊 Final DataFrame dtypes:\n{encoded_df.dtypes}")
+        print(f"📊 Sample values:\n{encoded_df.iloc[0].to_dict()}")
+        
+        # Make prediction
         prediction = conv_model.predict(encoded_df)[0]
+        
+        print(f"✅ Prediction successful: {prediction}")
+        print("="*50 + "\n")
+        
         return float(prediction)
+        
     except Exception as e:
         print(f"❌ Error in predict_conversions: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise Exception(f"Error predicting conversions: {str(e)}")
 
 def predict_roi(input_df):
     """
     Predict ROI using the trained ROI model.
-    
-    Args:
-        input_df (pd.DataFrame): Input data for prediction, including 'Conversions'.
-    
-    Returns:
-        float: Predicted ROI.
-    
-    Raises:
-        Exception: If ROI model is not loaded.
     """
     if roi_model is None:
         raise Exception("ROI model not loaded. Please check model files.")
     
     try:
+        print("\n" + "="*50)
+        print("🔮 PREDICT ROI")
+        print("="*50)
+        
         # Encode categorical features
         encoded_df = encode_categorical(input_df)
+        
+        # Expected features for ROI model (includes Conversions)
+        expected_features = [
+            'Ad Spend', 'Clicks', 'Impressions', 'Conversion Rate',
+            'Click-Through Rate (CTR)', 'Cost Per Click (CPC)', 'Cost Per Conversion',
+            'Customer Acquisition Cost (CAC)', 'Campaign Type', 'Region', 'Industry',
+            'Company Size', 'Seasonality Factor', 'Conversions'
+        ]
+        
+        # Reorder columns
+        encoded_df = encoded_df[expected_features]
+        
+        print(f"📊 Final DataFrame shape: {encoded_df.shape}")
+        print(f"📊 Final DataFrame dtypes:\n{encoded_df.dtypes}")
+        
+        # Make prediction
         prediction = roi_model.predict(encoded_df)[0]
+        
+        print(f"✅ Prediction successful: {prediction}")
+        print("="*50 + "\n")
+        
         return float(prediction)
+        
     except Exception as e:
+        print(f"❌ Error in predict_roi: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise Exception(f"Error predicting ROI: {str(e)}")
 
 def predict_actual_roi(input_df):
     """
     Predict actual ROI using the trained actual ROI model.
-    
-    Args:
-        input_df (pd.DataFrame): Input data for prediction.
-    
-    Returns:
-        float: Predicted actual ROI.
-    
-    Raises:
-        Exception: If actual ROI model is not loaded.
     """
     if actual_roi_model is None:
         raise Exception("Actual ROI model not loaded. Please check model files.")
     
     try:
         encoded_df = encode_categorical(input_df)
+        
+        expected_features = [
+            'Ad Spend', 'Clicks', 'Impressions', 'Conversion Rate',
+            'Click-Through Rate (CTR)', 'Cost Per Click (CPC)', 'Cost Per Conversion',
+            'Customer Acquisition Cost (CAC)', 'Campaign Type', 'Region', 'Industry',
+            'Company Size', 'Seasonality Factor'
+        ]
+        
+        encoded_df = encoded_df[expected_features]
         prediction = actual_roi_model.predict(encoded_df)[0]
         return float(prediction)
+        
     except Exception as e:
+        print(f"❌ Error in predict_actual_roi: {str(e)}")
         raise Exception(f"Error predicting actual ROI: {str(e)}")
 
 def predict_actual_conversions(input_df):
     """
     Predict actual conversions using the trained actual conversions model.
-    
-    Args:
-        input_df (pd.DataFrame): Input data for prediction.
-    
-    Returns:
-        float: Predicted actual conversions.
-    
-    Raises:
-        Exception: If actual conversions model is not loaded.
     """
     if actual_conversions_model is None:
         raise Exception("Actual conversions model not loaded. Please check model files.")
     
     try:
         encoded_df = encode_categorical(input_df)
+        
+        expected_features = [
+            'Ad Spend', 'Clicks', 'Impressions', 'Conversion Rate',
+            'Click-Through Rate (CTR)', 'Cost Per Click (CPC)', 'Cost Per Conversion',
+            'Customer Acquisition Cost (CAC)', 'Campaign Type', 'Region', 'Industry',
+            'Company Size', 'Seasonality Factor'
+        ]
+        
+        encoded_df = encoded_df[expected_features]
         prediction = actual_conversions_model.predict(encoded_df)[0]
         return float(prediction)
+        
     except Exception as e:
+        print(f"❌ Error in predict_actual_conversions: {str(e)}")
         raise Exception(f"Error predicting actual conversions: {str(e)}")
 
 # Utility function to check if models are ready
 def models_ready():
-    """
-    Check if all required models are loaded.
-    
-    Returns:
-        bool: True if all models are loaded, False otherwise.
-    """
+    """Check if all required models are loaded."""
     return all([roi_model, conv_model, actual_roi_model, actual_conversions_model, label_encoders])
 
 # Export function to get model status
 def get_model_status():
-    """
-    Get the loading status of all models.
-    
-    Returns:
-        dict: Status of each model.
-    """
+    """Get the loading status of all models."""
     return {
         'roi_model': roi_model is not None,
         'conv_model': conv_model is not None,
