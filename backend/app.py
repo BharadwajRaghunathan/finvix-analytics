@@ -2,13 +2,14 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager, jwt_required
+from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
 from dotenv import load_dotenv
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 import os
+import random
 from config import GEMINI_API_KEY
 from models import predict_conversions, predict_roi, predict_actual_roi, predict_actual_conversions
 from utils import fetch_suggestions
@@ -25,12 +26,23 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# CORS Configuration - Allow frontend origin
+# ✅ FIXED CORS CONFIGURATION
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-CORS(app, origins=[FRONTEND_URL, 'https://*.onrender.com'])
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "http://localhost:3000",
+            "https://finvix-frontend.onrender.com",
+            "https://*.onrender.com"
+        ],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,
+        "expose_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Database Configuration
-# Priority: DATABASE_URL (Render) > Individual vars (local)
 database_url = os.getenv('DATABASE_URL')
 
 if database_url:
@@ -76,7 +88,6 @@ numeric_features = [
 
 last_predict_input = None
 
-
 def determine_status(predicted, actual):
     if actual == 0:
         return 'moderate'
@@ -86,7 +97,6 @@ def determine_status(predicted, actual):
     elif relative_diff < -0.05:
         return 'negative'
     return 'moderate'
-
 
 def simulate_dashboard_data():
     global last_predict_input
@@ -151,12 +161,10 @@ def simulate_dashboard_data():
         })
     return data[::-1]
 
-
 # Health check endpoint for Render
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy', 'service': 'finvix-backend'}), 200
-
 
 # Public Routes
 @app.route('/', methods=['GET'])
@@ -167,41 +175,80 @@ def home():
         'version': '1.0.0'
     })
 
-
 @app.route('/register', methods=['POST'])
 def register():
-    data = request.get_json()
-    username = data.get('username')
-    email = data.get('email')
-    password = data.get('password')
-    if not username or not email or not password:
-        return jsonify({"message": "Missing required fields"}), 400
-    user, error = register_user(username, email, password)
-    if error:
-        return jsonify({"message": error}), 409
-    return jsonify({"message": "User registered successfully"}), 201
-
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+        
+        if not username or not email or not password:
+            return jsonify({"message": "Missing required fields"}), 400
+        
+        user, error = register_user(username, email, password)
+        if error:
+            return jsonify({"message": error}), 409
+        
+        return jsonify({"message": "User registered successfully"}), 201
+    except Exception as e:
+        print(f"Registration error: {str(e)}")
+        return jsonify({"message": f"Registration failed: {str(e)}"}), 500
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    if not username or not password:
-        return jsonify({"message": "Missing username or password"}), 400
-    access_token, error = login_user(username, password)
-    if error:
-        return jsonify({"message": error}), 401
-    return jsonify({"access_token": access_token}), 200
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({"message": "Missing username or password"}), 400
+        
+        access_token, error = login_user(username, password)
+        if error:
+            return jsonify({"message": error}), 401
+        
+        return jsonify({"access_token": access_token}), 200
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        return jsonify({"message": "Login failed"}), 500
 
+# ✅ ADDED: GREETING ROUTE
+@app.route('/greeting', methods=['GET'])
+@jwt_required()
+def greeting():
+    try:
+        current_user = get_jwt_identity()
+        
+        # Sample motivational quotes
+        quotes = [
+            "Success is not final, failure is not fatal: It is the courage to continue that counts.",
+            "The only way to do great work is to love what you do.",
+            "Believe you can and you're halfway there.",
+            "Innovation distinguishes between a leader and a follower.",
+            "The future belongs to those who believe in the beauty of their dreams."
+        ]
+        
+        return jsonify({
+            'username': current_user,
+            'quotes': random.sample(quotes, min(2, len(quotes)))
+        }), 200
+        
+    except Exception as e:
+        print(f"Greeting error: {str(e)}")
+        return jsonify({'message': 'Failed to fetch greeting'}), 500
 
 # Protected Routes
 @app.route('/dashboard', methods=['GET'])
 @jwt_required()
 def dashboard():
-    data = simulate_dashboard_data()
-    return jsonify({'data': data, 'status': 'success'})
-
+    try:
+        data = simulate_dashboard_data()
+        return jsonify({'data': data, 'status': 'success'}), 200
+    except Exception as e:
+        print(f"Dashboard error: {str(e)}")
+        return jsonify({'message': f'Dashboard error: {str(e)}', 'status': 'error'}), 500
 
 @app.route('/predict', methods=['POST'])
 @jwt_required()
@@ -209,8 +256,10 @@ def predict():
     try:
         data = request.get_json()
         model_type = data.get('model_type', 'both')
+        
         if 'input' not in data:
             return jsonify({'error': 'Missing input data', 'status': 'error'}), 400
+        
         if len(data['input']) != len(input_features):
             return jsonify({
                 'error': f'Expected {len(input_features)} features, got {len(data["input"])}',
@@ -262,6 +311,7 @@ def predict():
             result['roi_status'] = determine_status(roi_pred, actual_roi)
             result['actual_roi'] = float(actual_roi)
 
+        # Generate AI suggestions
         if model_type in ['conversions', 'both']:
             status = result['conversions_status']
             if status == 'positive':
@@ -315,8 +365,8 @@ def predict():
         return jsonify(result)
 
     except Exception as e:
+        print(f"Prediction error: {str(e)}")
         return jsonify({'error': str(e), 'status': 'error'}), 400
-
 
 @app.route('/report', methods=['POST'])
 @jwt_required()
@@ -361,14 +411,14 @@ def report():
                 suggestions += results['roi_suggestions'] + "\n"
             suggestions = suggestions.strip() or "No specific suggestions provided."
 
-        filename = f"report_{model_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename = f"/tmp/report_{model_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         generate_pdf(filename, dashboard_data, actual_roi, predicted_roi, actual_conversions, predicted_conversions, suggestions, model_type, results=None)
 
         return send_file(filename, as_attachment=True, mimetype='application/pdf')
 
     except Exception as e:
+        print(f"Report generation error: {str(e)}")
         return jsonify({'error': str(e), 'status': 'error'}), 400
-
 
 @app.route('/upload_predict', methods=['POST'])
 @jwt_required()
@@ -413,8 +463,8 @@ def upload_predict():
             return jsonify({'results': results, 'status': 'success'})
     
     except Exception as e:
+        print(f"Upload processing error: {str(e)}")
         return jsonify({'error': f'Upload processing failed: {str(e)}', 'status': 'error'}), 400
-
 
 @app.route('/upload_report', methods=['POST'])
 @jwt_required()
@@ -463,8 +513,8 @@ def upload_report():
         return send_file(filename, as_attachment=True, download_name=f"{model_type}_report.pdf")
     
     except Exception as e:
+        print(f"Upload report error: {str(e)}")
         return jsonify({'error': f'PDF generation failed: {str(e)}', 'status': 'error'}), 400
-
 
 @app.route('/download_results', methods=['POST'])
 @jwt_required()
@@ -508,11 +558,19 @@ def download_results():
         return send_file(filename, as_attachment=True, mimetype=mime_type)
     
     except Exception as e:
+        print(f"Download results error: {str(e)}")
         return jsonify({'error': str(e), 'status': 'error'}), 400
 
+# Initialize database
+def init_db():
+    with app.app_context():
+        try:
+            db.create_all()
+            print("✅ Database tables verified/created")
+        except Exception as e:
+            print(f"⚠️ Database initialization warning: {str(e)}")
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()  # Create database tables if they don't exist
+    init_db()
     port = int(os.getenv('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
