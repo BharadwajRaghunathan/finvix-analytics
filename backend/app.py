@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 import os
 import random
+import traceback  # ✅ ADDED: For detailed error logging
 from config import GEMINI_API_KEY
 from models import predict_conversions, predict_roi, predict_actual_roi, predict_actual_conversions, encode_categorical
 from utils import fetch_suggestions
@@ -19,12 +20,16 @@ from database_models import db
 from auth import register_user, login_user
 import warnings
 
+
 warnings.filterwarnings('ignore', category=UserWarning, module='pickle')
+
 
 # Load environment variables
 load_dotenv()
 
+
 app = Flask(__name__)
+
 
 # ✅ FIXED CORS CONFIGURATION
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
@@ -42,8 +47,10 @@ CORS(app, resources={
     }
 })
 
+
 # Database Configuration
 database_url = os.getenv('DATABASE_URL')
+
 
 if database_url:
     # Render provides postgres:// but SQLAlchemy needs postgresql://
@@ -58,13 +65,16 @@ else:
     DB_NAME = os.getenv('DB_NAME', 'finvix_db')
     app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'default-secret-key-change-in-production')
+
 
 # Initialize extensions
 db.init_app(app)
 app.bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
+
 
 input_features = [
     'Ad Spend', 'Clicks', 'Impressions', 'Conversion Rate',
@@ -73,6 +83,7 @@ input_features = [
     'Company Size', 'Seasonality Factor'
 ]
 
+
 expected_categories = {
     'Campaign Type': ['Search Ads', 'Display Ads', 'Email', 'Social Media'],
     'Region': ['South America', 'North America', 'Asia', 'Europe'],
@@ -80,15 +91,19 @@ expected_categories = {
     'Company Size': ['Small']
 }
 
+
 numeric_features = [
     'Ad Spend', 'Clicks', 'Impressions', 'Conversion Rate',
     'Click-Through Rate (CTR)', 'Cost Per Click (CPC)', 'Cost Per Conversion',
     'Customer Acquisition Cost (CAC)', 'Seasonality Factor'
 ]
 
+
 last_predict_input = None
 
+
 def determine_status(predicted, actual):
+    """Determine performance status based on predicted vs actual values"""
     if actual == 0:
         return 'moderate'
     relative_diff = (predicted - actual) / abs(actual)
@@ -98,7 +113,7 @@ def determine_status(predicted, actual):
         return 'negative'
     return 'moderate'
 
-# ✅ FIXED: Use simulated data instead of model predictions for dashboard
+
 def simulate_dashboard_data():
     """Generate simulated dashboard data without model predictions to avoid encoding errors"""
     data = []
@@ -149,10 +164,12 @@ def simulate_dashboard_data():
     
     return data[::-1]
 
+
 # Health check endpoint for Render
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy', 'service': 'finvix-backend'}), 200
+
 
 # Public Routes
 @app.route('/', methods=['GET'])
@@ -162,6 +179,7 @@ def home():
         'status': 'success',
         'version': '1.0.0'
     })
+
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -180,8 +198,10 @@ def register():
         
         return jsonify({"message": "User registered successfully"}), 201
     except Exception as e:
-        print(f"Registration error: {str(e)}")
+        print(f"❌ Registration error: {str(e)}")
+        traceback.print_exc()  # ✅ ADDED: Detailed error logging
         return jsonify({"message": f"Registration failed: {str(e)}"}), 500
+
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -199,10 +219,11 @@ def login():
         
         return jsonify({"access_token": access_token}), 200
     except Exception as e:
-        print(f"Login error: {str(e)}")
+        print(f"❌ Login error: {str(e)}")
+        traceback.print_exc()  # ✅ ADDED: Detailed error logging
         return jsonify({"message": "Login failed"}), 500
 
-# ✅ GREETING ROUTE
+
 @app.route('/greeting', methods=['GET'])
 @jwt_required()
 def greeting():
@@ -224,8 +245,10 @@ def greeting():
         }), 200
         
     except Exception as e:
-        print(f"Greeting error: {str(e)}")
+        print(f"❌ Greeting error: {str(e)}")
+        traceback.print_exc()  # ✅ ADDED: Detailed error logging
         return jsonify({'message': 'Failed to fetch greeting'}), 500
+
 
 # Protected Routes
 @app.route('/dashboard', methods=['GET'])
@@ -235,8 +258,10 @@ def dashboard():
         data = simulate_dashboard_data()
         return jsonify({'data': data, 'status': 'success'}), 200
     except Exception as e:
-        print(f"Dashboard error: {str(e)}")
+        print(f"❌ Dashboard error: {str(e)}")
+        traceback.print_exc()  # ✅ ADDED: Detailed error logging
         return jsonify({'message': f'Dashboard error: {str(e)}', 'status': 'error'}), 500
+
 
 @app.route('/predict', methods=['POST'])
 @jwt_required()
@@ -244,6 +269,8 @@ def predict():
     try:
         data = request.get_json()
         model_type = data.get('model_type', 'both')
+        
+        print(f"🔍 Prediction request received: model_type={model_type}")  # ✅ ADDED: Request logging
         
         if 'input' not in data:
             return jsonify({'error': 'Missing input data', 'status': 'error'}), 400
@@ -256,15 +283,17 @@ def predict():
 
         input_dict = dict(zip(input_features, data['input']))
 
+        # Validate categorical features
         categorical_features = ['Campaign Type', 'Region', 'Industry', 'Company Size']
         for feature in categorical_features:
             value = input_dict[feature]
             if value not in expected_categories[feature]:
                 return jsonify({
-                    'error': f'Invalid category for {feature}: {value}',
+                    'error': f'Invalid category for {feature}: {value}. Expected one of: {expected_categories[feature]}',
                     'status': 'error'
                 }), 400
 
+        # Validate and convert numeric features
         for feature in numeric_features:
             try:
                 input_dict[feature] = float(input_dict[feature])
@@ -275,10 +304,14 @@ def predict():
         last_predict_input = input_dict.copy()
 
         input_df = pd.DataFrame([input_dict])
+        
+        print(f"📊 Input DataFrame created with shape: {input_df.shape}")  # ✅ ADDED: Progress logging
 
         # Get actual predictions with proper encoding
         actual_roi = predict_actual_roi(input_df)
         actual_conversions = predict_actual_conversions(input_df)
+        
+        print(f"✅ Actual predictions: ROI={actual_roi:.2f}, Conversions={actual_conversions:.2f}")  # ✅ ADDED
 
         result = {}
 
@@ -287,6 +320,7 @@ def predict():
             result['conversions'] = float(conv_pred)
             result['conversions_status'] = determine_status(conv_pred, actual_conversions)
             result['actual_conversions'] = float(actual_conversions)
+            print(f"✅ Conversions prediction: {conv_pred:.2f} (status: {result['conversions_status']})")  # ✅ ADDED
 
         if model_type in ['roi', 'both']:
             if 'conversions' not in result:
@@ -299,6 +333,7 @@ def predict():
             result['roi'] = float(roi_pred)
             result['roi_status'] = determine_status(roi_pred, actual_roi)
             result['actual_roi'] = float(actual_roi)
+            print(f"✅ ROI prediction: {roi_pred:.2f} (status: {result['roi_status']})")  # ✅ ADDED
 
         # Generate AI suggestions
         if model_type in ['conversions', 'both']:
@@ -351,11 +386,14 @@ def predict():
                 )
             result['roi_suggestions'] = fetch_suggestions(roi_prompt)
 
+        print(f"🎉 Prediction completed successfully!")  # ✅ ADDED: Success confirmation
         return jsonify(result)
 
     except Exception as e:
-        print(f"Prediction error: {str(e)}")
+        print(f"❌ Prediction error: {str(e)}")
+        traceback.print_exc()  # ✅ ADDED: Full stack trace
         return jsonify({'error': str(e), 'status': 'error'}), 400
+
 
 @app.route('/report', methods=['POST'])
 @jwt_required()
@@ -406,8 +444,10 @@ def report():
         return send_file(filename, as_attachment=True, mimetype='application/pdf')
 
     except Exception as e:
-        print(f"Report generation error: {str(e)}")
+        print(f"❌ Report generation error: {str(e)}")
+        traceback.print_exc()  # ✅ ADDED
         return jsonify({'error': str(e), 'status': 'error'}), 400
+
 
 @app.route('/upload_predict', methods=['POST'])
 @jwt_required()
@@ -452,8 +492,10 @@ def upload_predict():
             return jsonify({'results': results, 'status': 'success'})
     
     except Exception as e:
-        print(f"Upload processing error: {str(e)}")
+        print(f"❌ Upload processing error: {str(e)}")
+        traceback.print_exc()  # ✅ ADDED
         return jsonify({'error': f'Upload processing failed: {str(e)}', 'status': 'error'}), 400
+
 
 @app.route('/upload_report', methods=['POST'])
 @jwt_required()
@@ -502,8 +544,10 @@ def upload_report():
         return send_file(filename, as_attachment=True, download_name=f"{model_type}_report.pdf")
     
     except Exception as e:
-        print(f"Upload report error: {str(e)}")
+        print(f"❌ Upload report error: {str(e)}")
+        traceback.print_exc()  # ✅ ADDED
         return jsonify({'error': f'PDF generation failed: {str(e)}', 'status': 'error'}), 400
+
 
 @app.route('/download_results', methods=['POST'])
 @jwt_required()
@@ -547,8 +591,10 @@ def download_results():
         return send_file(filename, as_attachment=True, mimetype=mime_type)
     
     except Exception as e:
-        print(f"Download results error: {str(e)}")
+        print(f"❌ Download results error: {str(e)}")
+        traceback.print_exc()  # ✅ ADDED
         return jsonify({'error': str(e), 'status': 'error'}), 400
+
 
 # Initialize database
 def init_db():
@@ -558,8 +604,11 @@ def init_db():
             print("✅ Database tables verified/created")
         except Exception as e:
             print(f"⚠️ Database initialization warning: {str(e)}")
+            traceback.print_exc()  # ✅ ADDED
+
 
 if __name__ == '__main__':
     init_db()
     port = int(os.getenv('PORT', 5000))
+    print(f"🚀 Starting Finvix Backend on port {port}")  # ✅ ADDED: Startup message
     app.run(debug=False, host='0.0.0.0', port=port)
