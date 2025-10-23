@@ -4,15 +4,21 @@
 .env.production
 .env.development
 
-# Python
+# Python - Cache and compiled files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# Python - Virtual environments
 env/
 venv/
 ENV/
+env.bak/
+venv.bak/
+
+# Python - Build and distribution
 build/
 develop-eggs/
 dist/
@@ -25,27 +31,81 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Database
+# Database files
 *.db
 *.sqlite
 *.sqlite3
 
-# Models
-*.pkl
-*.h5
-*.joblib
+# Model binary files ONLY (not Python code!)
+# ✅ CRITICAL: Only ignore model binaries in models/ directory
+models/*.pkl
+models/*.h5
+models/*.joblib
+models/*.pt
+models/*.pth
+models/*.onnx
 
-# IDE
+# ✅ IMPORTANT: Explicitly allow Python code files
+# These lines ensure models.py and other .py files are NOT ignored
+!models.py
+!**/models.py
+!*.py
+
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
+.swp
 *.swo
 *~
+.project
+.pydevproject
+.settings/
 
-# OS
+# OS specific files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
